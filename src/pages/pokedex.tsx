@@ -1,25 +1,20 @@
 import React, { useState } from "react";
 import { useQuery } from "@apollo/client";
 import { FETCH_POKEMONS } from "../graphql/queries/pokedex-queries";
+import client from "@/graphql/apollo-client";
+import {
+  PokedexProps,
+  PokemonSummary,
+  PokemonSummaryQuery,
+} from "../../types/pokedex.types";
 
-const Pokedex = () => {
+const Pokedex = ({ pokemonsProps }: PokedexProps) => {
   const [currentPage, setCurrentPage] = useState(1);
-
+  const [pokemons, setPokemons] = useState(pokemonsProps);
+  const [loading, setLoading] = useState<boolean>(false);
   const [limit, setLimit] = useState(20);
-  const { loading, error, data, refetch, networkStatus } = useQuery(
-    FETCH_POKEMONS,
-    {
-      variables: { first: limit },
-      notifyOnNetworkStatusChange: true,
-    }
-  );
-  const { pokemons } = data || {};
-  if (loading || networkStatus === 4) {
+  if (loading) {
     return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error</div>;
   }
 
   const handleBackBtnClick = () => {
@@ -29,15 +24,27 @@ const Pokedex = () => {
   const handleForwardBtnClick = async () => {
     setCurrentPage((prevPage) => prevPage + 1);
     if (pokemons.length === currentPage * limit) {
-      await refetch({ first: pokemons.length + limit });
+      setLoading(true);
+      //await refetch({ first: pokemons.length + limit });
+      try {
+        const results = await client.query<PokemonSummaryQuery>({
+          query: FETCH_POKEMONS,
+          variables: { first: pokemons.length + limit },
+        });
+        setPokemons(results.data.pokemons);
+      } catch (error) {
+        console.log({ error });
+      }
     }
+    setLoading(false);
   };
 
-  const getCurrentPageData = (pokemons) => {
+  const getCurrentPageData = (pokemons: PokemonSummary[]) => {
     const startIndex = (currentPage - 1) * limit;
     const endIndex = startIndex + limit;
     return pokemons.slice(startIndex, endIndex);
   };
+
   const currentPagePokemons = getCurrentPageData(pokemons);
 
   if (!currentPagePokemons.length) {
@@ -46,10 +53,10 @@ const Pokedex = () => {
         <div className="text-center">
           <img
             src="https://www.giantbomb.com/a/uploads/scale_small/13/135472/1892134-054psyduck.png"
-            alt="No Pokemon Found"
+            alt="No Pokemons Found"
             className="mx-auto w-32 h-32"
           />
-          <p className="text-gray-500 mt-4">No Pokemon Found</p>
+          <p className="text-gray-500 mt-4">No Pokemons Found</p>
         </div>
       </div>
     );
@@ -60,20 +67,19 @@ const Pokedex = () => {
         Pokedex
       </h1>
       <div className="grid grid-cols-4 gap-4">
-        {currentPagePokemons.map((pokemon) => (
-          <div key={pokemon.name} className="bg-white rounded-lg p-4 shadow-md">
-            <img
-              src={pokemon.image}
-              alt={pokemon.name}
-              className="mx-auto mb-4"
-            />
-            <div className="text-center">
-              <h2 className="text-lg font-bold">{pokemon.name}</h2>
-              <p className="text-gray-700">{`Type: ${pokemon.type}`}</p>
-              <p className="text-gray-700">{`Weakness: ${pokemon.weakness}`}</p>
+        {currentPagePokemons.map((pokemon) => {
+          const { id, name, number, types, image } = pokemon;
+          return (
+            <div key={id} className="bg-white rounded-lg p-4 shadow-md">
+              <img src={image} alt={name} className="mx-auto mb-4" />
+              <div className="text-center">
+                <p className="text-gray-200">{number}</p>
+                <h2 className="text-lg font-bold text-gray-900">{name}</h2>
+                <p className="text-gray-700">{`Type: ${types}`}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div>
         <button
@@ -101,6 +107,15 @@ const Pokedex = () => {
       </div>
     </div>
   );
+};
+
+export const getStaticProps = async () => {
+  const { data } = await client.query({
+    query: FETCH_POKEMONS,
+    variables: { first: 60 }, //static
+  });
+
+  return { props: { pokemonsProps: data.pokemons } };
 };
 
 export default Pokedex;
